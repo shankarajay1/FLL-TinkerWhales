@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cancer–Radiation Exposure Correlation Explorer</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root {
+    --ink: #1f2933;
+    --muted: #52616b;
+    --line: #d7dde3;
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --accent: #2563eb;
+    --warn-bg: #fff7ed;
+    --warn-border: #fdba74;
+    --danger: #dc2626;
+    --safe: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; }
+  h2 { font-size: 20px; margin: 28px 0 10px; }
+  h3 { font-size: 16px; margin: 18px 0 6px; }
+  p { margin: 8px 0; }
+  .subtitle { color: var(--muted); margin-top: 0; }
+  .banner {
+    background: var(--warn-bg);
+    border: 2px solid var(--warn-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  .banner strong { color: #9a3412; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 14px 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; margin: 8px 0 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.25); }
+  .tri { width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid #111; display: inline-block; }
+  svg { width: 100%; height: auto; background: #eef2f5; border-radius: 10px; border: 1px solid var(--line); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 8px;
+  }
+  button.secondary { background: #fff; color: var(--accent); }
+  select { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background:#fff; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { background: #f0f4f8; }
+  .bar-track { background: #e5ebf1; border-radius: 6px; height: 18px; width: 100%; overflow: hidden; }
+  .bar-fill { background: var(--danger); height: 100%; }
+  .stat-big { font-size: 22px; font-weight: 700; }
+  .caveat { background: #f0fdf4; border: 2px solid #86efac; border-radius: 10px; padding: 14px 16px; }
+  .future { background: #eef2ff; border: 2px solid #c7d2fe; border-radius: 10px; padding: 16px; }
+  .pill { display:inline-block; background:#e0e7ff; color:#3730a3; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; }
+  ul { margin: 6px 0 6px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .tooltip {
+    position: fixed; pointer-events: none; background: #111; color: #fff;
+    font-size: 12px; padding: 6px 8px; border-radius: 6px; z-index: 50; max-width: 240px;
+    transform: translate(10px, -10px);
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo, useRef } = React;
+
+// ---------------------------------------------------------------------------
+// REAL contamination site coordinates (public/historical reference locations).
+// These locate the sites on the map. They contain NO patient data.
+// ---------------------------------------------------------------------------
+const SITES = [
+  { id: "hanford",   name: "Hanford Site (WA)",            lat: 46.5500, lon: -119.4880 },
+  { id: "oakridge",  name: "Oak Ridge (TN)",               lat: 35.9300, lon: -84.3100 },
+  { id: "losalamos", name: "Los Alamos (NM)",              lat: 35.8440, lon: -106.2870 },
+  { id: "slaps",     name: "SLAPS – St. Louis Airport (MO)",lat: 38.7490, lon: -90.3700 },
+  { id: "slds",      name: "SLDS – Downtown St. Louis (MO)",lat: 38.6340, lon: -90.2030 },
+  { id: "coldwater", name: "Coldwater Creek (MO)",         lat: 38.7900, lon: -90.3300 },
+  { id: "hiss",      name: "HISS / Futura (MO)",           lat: 38.7560, lon: -90.3580 },
+  { id: "tonawanda", name: "Tonawanda / Niagara (NY)",     lat: 43.0200, lon: -78.9300 },
+];
+
+// ---------------------------------------------------------------------------
+// Distance: Haversine (great-circle) in miles.
+// ---------------------------------------------------------------------------
+function distanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Earth radius in miles
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+// ---------------------------------------------------------------------------
+// Seeded random generator so the synthetic dataset is reproducible.
+// ---------------------------------------------------------------------------
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+const CANCER_TYPES = ["Thyroid", "Leukemia", "Lung", "Bone", "Breast", "Other"];
+
+// ---------------------------------------------------------------------------
+// Generate ~200 SIMULATED residents. NOT REAL PEOPLE / NOT REAL PATIENTS.
+// We intentionally bake in a mild proximity effect so the demo can show a
+// pattern — this is a teaching model, not evidence about real cancer rates.
+// ---------------------------------------------------------------------------
+function generateResidents(seed) {
+  const rng = makeRng(seed);
+  const residents = [];
+  const N = 200;
+  for (let i = 0; i < N; i++) {
+    // Scatter residents around a randomly chosen site (some far, some near).
+    const site = SITES[Math.floor(rng() * SITES.length)];
+    const spread = 0.05 + rng() * 0.9; // degrees of scatter (~3 to ~60 mi)
+    const lat = site.lat + (rng() - 0.5) * spread;
+    const lon = site.lon + (rng() - 0.5) * spread * 1.3;
+
+    // nearest-site distance for this resident
+    let nearest = Infinity;
+    let nearestSite = null;
+    for (const s of SITES) {
+      const d = distanceMiles(lat, lon, s.lat, s.lon);
+      if (d < nearest) { nearest = d; nearestSite = s; }
+    }
+
+    // Simulated cancer probability: small baseline + a gentle bump when closer.
+    // (Synthetic teaching signal only.)
+    const base = 0.07;
+    const proximityBump = nearest < 5 ? 0.16 : nearest < 15 ? 0.08 : 0.0;
+    const p = base + proximityBump;
+    const hasCancer = rng() < p;
+    const cancerType = hasCancer ? CANCER_TYPES[Math.floor(rng() * CANCER_TYPES.length)] : null;
+
+    residents.push({
+      id: "SIM-" + String(i + 1).padStart(3, "0"),
+      lat, lon,
+      hasCancer,
+      cancerType,
+      nearestMiles: nearest,
+      nearestSiteId: nearestSite.id,
+    });
+  }
+  return residents;
+}
+
+// ---------------------------------------------------------------------------
+// Map projection. We map the continental US bounding box onto the SVG canvas.
+// ---------------------------------------------------------------------------
+const BOUNDS = { minLon: -125, maxLon: -67, minLat: 24, maxLat: 50 };
+const VIEW = { w: 1000, h: 520, pad: 20 };
+
+function project(lat, lon) {
+  const x =
+    VIEW.pad +
+    ((lon - BOUNDS.minLon) / (BOUNDS.maxLon - BOUNDS.minLon)) *
+      (VIEW.w - 2 * VIEW.pad);
+  const y =
+    VIEW.pad +
+    (1 - (lat - BOUNDS.minLat) / (BOUNDS.maxLat - BOUNDS.minLat)) *
+      (VIEW.h - 2 * VIEW.pad);
+  return { x, y };
+}
+
+function MapView({ residents, sites, showHealthy, onHover, onLeave }) {
+  return (
+    <svg viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} role="img" aria-label="Map of simulated residents and contamination sites">
+      {/* faint reference grid */}
+      {[-120,-110,-100,-90,-80,-70].map((lon) => {
+        const a = project(BOUNDS.minLat, lon), b = project(BOUNDS.maxLat, lon);
+        return <line key={"v"+lon} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#dde4ea" strokeWidth="1" />;
+      })}
+      {[30,40,50].map((lat) => {
+        const a = project(lat, BOUNDS.minLon), b = project(lat, BOUNDS.maxLon);
+        return <line key={"h"+lat} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#dde4ea" strokeWidth="1" />;
+      })}
+
+      {/* residents */}
+      {residents.map((r) => {
+        if (!showHealthy && !r.hasCancer) return null;
+        const { x, y } = project(r.lat, r.lon);
+        return (
+          <circle
+            key={r.id}
+            cx={x} cy={y} r={4.5}
+            fill={r.hasCancer ? "#dc2626" : "#2563eb"}
+            fillOpacity={r.hasCancer ? 0.9 : 0.45}
+            stroke="#ffffff" strokeWidth="0.8"
+            onMouseMove={(e) => onHover(e, `${r.id} — ${r.hasCancer ? "Cancer: " + r.cancerType : "No cancer"} • ${r.nearestMiles.toFixed(1)} mi to nearest site`)}
+            onMouseLeave={onLeave}
+          />
+        );
+      })}
+
+      {/* sites (triangles on top) */}
+      {sites.map((s) => {
+        const { x, y } = project(s.lat, s.lon);
+        return (
+          <g key={s.id}
+             onMouseMove={(e) => onHover(e, `Contamination site: ${s.name}`)}
+             onMouseLeave={onLeave}>
+            <polygon
+              points={`${x},${y-9} ${x-8},${y+6} ${x+8},${y+6}`}
+              fill="#111827" stroke="#fbbf24" strokeWidth="1.5"
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Statistics: bin residents by distance and compute cancer rate per bin.
+// ---------------------------------------------------------------------------
+const BINS = [
+  { key: "near", label: "Within 5 miles", test: (d) => d < 5 },
+  { key: "mid",  label: "5 to 15 miles",  test: (d) => d >= 5 && d < 15 },
+  { key: "far",  label: "15+ miles",      test: (d) => d >= 15 },
+];
+
+function computeStats(residents) {
+  return BINS.map((b) => {
+    const group = residents.filter((r) => b.test(r.nearestMiles));
+    const cases = group.filter((r) => r.hasCancer).length;
+    const total = group.length;
+    const rate = total ? (cases / total) * 100 : 0;
+    return { ...b, total, cases, rate };
+  });
+}
+
+function App() {
+  const [seed, setSeed] = useState(42);
+  const [showHealthy, setShowHealthy] = useState(true);
+  const [siteFilter, setSiteFilter] = useState("all");
+  const [tooltip, setTooltip] = useState(null);
+  const tipRef = useRef(null);
+
+  const residents = useMemo(() => generateResidents(seed), [seed]);
+
+  const filtered = useMemo(() => {
+    if (siteFilter === "all") return residents;
+    return residents.filter((r) => r.nearestSiteId === siteFilter);
+  }, [residents, siteFilter]);
+
+  const stats = useMemo(() => computeStats(filtered), [filtered]);
+  const maxRate = Math.max(1, ...stats.map((s) => s.rate));
+
+  const totalCases = filtered.filter((r) => r.hasCancer).length;
+
+  const onHover = (e, text) => setTooltip({ x: e.clientX, y: e.clientY, text });
+  const onLeave = () => setTooltip(null);
+
+  return (
+    <div className="wrap">
+      <h1>Cancer–Radiation Exposure Correlation Explorer</h1>
+      <p className="subtitle">
+        A FIRST LEGO League Innovation Project · Manhattan Project legacy contamination sites
+      </p>
+
+      <div className="banner">
+        <strong>⚠️ DEMONSTRATION ONLY — SIMULATED DATA.</strong> Every "resident" dot on this map is{" "}
+        <strong>fake, computer-generated sample data</strong> created just to show how the tool would work.
+        These are <strong>not real people and not real patients</strong>. A real version would require{" "}
+        <strong>IRB (ethics board) approval</strong> and a signed <strong>Data Use Agreement</strong> before
+        any real health data could be used.
+      </div>
+
+      {/* MAP CARD */}
+      <div className="card">
+        <h2>1. The Map</h2>
+        <p>
+          Black triangles ▲ are <strong>real contamination site locations</strong>. Each round dot is one{" "}
+          <strong>simulated resident</strong>. Red = a simulated cancer diagnosis, blue = no cancer.
+          Hover over any dot to see its details.
+        </p>
+        <div className="legend">
+          <span><span className="tri"></span> Contamination site (real location)</span>
+          <span><span className="dot" style={{background:"#dc2626"}}></span> Simulated resident — has cancer</span>
+          <span><span className="dot" style={{background:"#2563eb", opacity:0.6}}></span> Simulated resident — no cancer</span>
+        </div>
+        <div className="controls">
+          <label>Focus on a site:&nbsp;
+            <select value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)}>
+              <option value="all">All sites</option>
+              {SITES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+          <button className="secondary" onClick={() => setShowHealthy((v) => !v)}>
+            {showHealthy ? "Hide no-cancer dots" : "Show no-cancer dots"}
+          </button>
+          <button onClick={() => setSeed((s) => s + 1)}>🔄 Generate a new fake sample</button>
+        </div>
+        <MapView
+          residents={filtered}
+          sites={siteFilter === "all" ? SITES : SITES.filter((s) => s.id === siteFilter)}
+          showHealthy={showHealthy}
+          onHover={onHover}
+          onLeave={onLeave}
+        />
+        <p className="muted">
+          Showing {filtered.length} simulated residents ({totalCases} with a simulated cancer diagnosis).
+          Map uses a simple latitude/longitude grid — no online map service or API key.
+        </p>
+      </div>
+
+      {/* PROXIMITY + STATS */}
+      <div className="card">
+        <h2>2 & 3. Proximity Calculator + Statistics</h2>
+        <p>
+          For every simulated resident, the tool measures the straight-line distance to the{" "}
+          <strong>nearest</strong> contamination site. Then it puts residents into three distance groups
+          ("bins") and asks a simple question: <strong>in which group do more people have cancer?</strong>
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Distance group</th>
+              <th># residents</th>
+              <th># with cancer</th>
+              <th>Cancer rate</th>
+              <th style={{width:"30%"}}>How big is the rate?</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.map((s) => (
+              <tr key={s.key}>
+                <td><strong>{s.label}</strong></td>
+                <td>{s.total}</td>
+                <td>{s.cases}</td>
+                <td className="stat-big">{s.rate.toFixed(1)}%</td>
+                <td>
+                  <div className="bar-track">
+                    <div className="bar-fill" style={{ width: `${(s.rate / maxRate) * 100}%` }}></div>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <h3>What does "cancer rate" mean? (in plain words)</h3>
+        <p className="muted">
+          The cancer rate is just: <strong>(people with cancer ÷ total people in the group) × 100</strong>.
+          If 20 people live in a group and 4 have cancer, the rate is 4 ÷ 20 = 0.20 = <strong>20%</strong>.
+          If the bars get <em>taller as you get closer</em> to a site, that's a <strong>correlation</strong> —
+          a pattern worth investigating. It does <strong>not</strong> prove the site caused the cancer.
+        </p>
+      </div>
+
+      {/* CAVEAT */}
+      <div className="card caveat">
+        <h2 style={{marginTop:0}}>4. Important: Correlation is NOT Causation</h2>
+        <p>
+          Even if the chart shows higher cancer rates closer to a site, that does <strong>not</strong> prove
+          the radiation caused it. Two things can move together by <strong>coincidence</strong>, or because a{" "}
+          <strong>third hidden reason</strong> is affecting both. Scientists call these hidden reasons{" "}
+          <strong>confounding factors</strong>. For cancer, these include:
+        </p>
+        <ul>
+          <li><strong>Age</strong> — older neighborhoods naturally have more cancer cases.</li>
+          <li><strong>Smoking</strong> — a huge cause of cancer that has nothing to do with radiation.</li>
+          <li><strong>Other pollutants</strong> — factories, traffic, or chemicals in the same area.</li>
+          <li><strong>How long someone lived there</strong> — moving in last year is different from 40 years.</li>
+          <li><strong>Genetics & family history</strong>, diet, and access to doctors.</li>
+        </ul>
+        <p>
+          A real study has to carefully <em>account for</em> all of these before saying anything caused anything.
+        </p>
+      </div>
+
+      {/* REAL WORLD IMPLEMENTATION */}
+      <h2>Real-World Implementation <span className="pill">FUTURE WORK — NOT BUILT INTO THIS PROTOTYPE</span></h2>
+      <div className="card future">
+        <p>
+          Everything above runs on <strong>fake data</strong>. To do this for real — responsibly and
+          legally — a team would need institutional partners and would build the following.{" "}
+          <strong>None of this is in the prototype.</strong>
+        </p>
+
+        <div className="grid2">
+          <div>
+            <h3>Real data sources</h3>
+            <ul>
+              <li><strong>SEER</strong> (NCI) — cancer incidence registry data.</li>
+              <li><strong>U.S. Census / ACS</strong> — population, age, and demographics to compute fair rates.</li>
+              <li><strong>EPA RadNet</strong> — environmental radiation monitoring measurements.</li>
+              <li><strong>NRC ADAMS</strong> — nuclear regulatory documents and site records.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Ethics & permission (required first)</h3>
+            <ul>
+              <li><strong>IRB approval</strong> — an ethics board must review any study using human health data.</li>
+              <li><strong>Data Use Agreement</strong> — a signed legal contract governing how protected data is used and secured.</li>
+              <li>De-identification and strict privacy/security controls.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Geospatial approach</h3>
+            <ul>
+              <li><strong>PostGIS</strong> (PostgreSQL) to store and query locations as real geographic data.</li>
+              <li><strong>GeoPandas</strong> (Python) for distance buffers, spatial joins, and mapping.</li>
+              <li>Proper statistics: age-adjusted rates, confidence intervals, and confounder controls.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Better exposure data</h3>
+            <ul>
+              <li>A <strong>patient residential-history questionnaire</strong> — where someone lived and for how long, since people move.</li>
+              <li>Combining lived-location history with measured contamination over time.</li>
+            </ul>
+          </div>
+        </div>
+        <p className="muted" style={{marginTop:12}}>
+          This stretch vision would require partnership with a university, health department, or research
+          institution. It is described here as goals — it is <strong>not</strong> implemented in this demo.
+        </p>
+      </div>
+
+      <p className="muted" style={{textAlign:"center", marginTop:20}}>
+        Prototype for educational FLL Innovation Project use · Simulated data only · No real patient information.
+      </p>
+
+      {tooltip && (
+        <div className="tooltip" ref={tipRef} style={{ left: tooltip.x, top: tooltip.y }}>
+          {tooltip.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
