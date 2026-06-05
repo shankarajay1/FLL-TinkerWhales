@@ -7,6 +7,8 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <style>
   :root {
     --ink: #1f2933;
@@ -29,6 +31,8 @@
     line-height: 1.5;
   }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  .brandhead { display: flex; align-items: center; gap: 16px; margin-bottom: 4px; }
+  .brandlogo { flex: 0 0 auto; border-radius: 12px; }
   h1 { font-size: 26px; margin: 8px 0 4px; }
   h2 { font-size: 20px; margin: 28px 0 10px; }
   h3 { font-size: 16px; margin: 18px 0 6px; }
@@ -55,7 +59,7 @@
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.25); }
   .tri { width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid #111; display: inline-block; }
-  svg { width: 100%; height: auto; background: #eef2f5; border-radius: 10px; border: 1px solid var(--line); }
+  svg { width: 100%; height: auto; background: #dbeafe; border-radius: 10px; border: 1px solid var(--line); }
   .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
   button {
     font: inherit; cursor: pointer; border: 1px solid var(--accent);
@@ -104,6 +108,38 @@ const SITES = [
   { id: "hiss",      name: "HISS / Futura (MO)",           lat: 38.7560, lon: -90.3580 },
   { id: "tonawanda", name: "Tonawanda / Niagara (NY)",     lat: 43.0200, lon: -78.9300 },
 ];
+
+// ---------------------------------------------------------------------------
+// REAL counties that contain (or are nearest to) each contamination site.
+// These are the geographic units at which official cancer data is released —
+// registries publish AGGREGATED, age-adjusted rates per county, NEVER
+// individual patients. Each county is wired to its official NCI State Cancer
+// Profiles source page. NO rate values are pre-filled — the user must enter the
+// verified number from the source, so nothing here is invented or fake.
+// "lat/lon" are approximate county centroids, used only for distance-to-site.
+// ---------------------------------------------------------------------------
+const COUNTIES = [
+  { fips: "53005", name: "Benton County, WA",     forSite: "hanford",   lat: 46.25, lon: -119.51 },
+  { fips: "47001", name: "Anderson County, TN",   forSite: "oakridge",  lat: 36.12, lon: -84.20 },
+  { fips: "35028", name: "Los Alamos County, NM", forSite: "losalamos", lat: 35.87, lon: -106.30 },
+  { fips: "29189", name: "St. Louis County, MO",  forSite: "coldwater", lat: 38.64, lon: -90.43 },
+  { fips: "29510", name: "St. Louis City, MO",    forSite: "slds",      lat: 38.63, lon: -90.24 },
+  { fips: "36029", name: "Erie County, NY",       forSite: "tonawanda", lat: 42.77, lon: -78.78 },
+  { fips: "36063", name: "Niagara County, NY",    forSite: "tonawanda", lat: 43.17, lon: -78.75 },
+];
+
+// Build the official NCI State Cancer Profiles source URL for a county
+// (all-cancer-sites, both sexes, all ages, age-adjusted incidence).
+function sourceUrlFor(fips) {
+  const stateFIPS = fips.slice(0, 2);
+  const countyFIPS = fips;
+  return (
+    "https://statecancerprofiles.cancer.gov/incidencerates/index.php?" +
+    `stateFIPS=${stateFIPS}&areatype=county&cancer=001&race=00&sex=0` +
+    `&age=001&stage=999&type=incd&sortVariableName=rate&sortOrder=default` +
+    `&output=1&fips=${countyFIPS}`
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Distance: Haversine (great-circle) in miles.
@@ -177,40 +213,53 @@ function generateResidents(seed) {
 }
 
 // ---------------------------------------------------------------------------
-// Map projection. We map the continental US bounding box onto the SVG canvas.
+// Map projection. We use d3's Albers USA projection — the same realistic,
+// atlas-style US map shape used in professional maps — drawn into a 975x610
+// canvas. Real state geometry is loaded from the public "us-atlas" TopoJSON
+// dataset (a static data file from a CDN, like React itself). No map tiles,
+// no map service, and no API key are used.
 // ---------------------------------------------------------------------------
-const BOUNDS = { minLon: -125, maxLon: -67, minLat: 24, maxLat: 50 };
-const VIEW = { w: 1000, h: 520, pad: 20 };
+const VIEW = { w: 975, h: 610 };
+const hasD3 = typeof d3 !== "undefined" && d3.geoAlbersUsa;
+const projection = hasD3
+  ? d3.geoAlbersUsa().scale(1300).translate([VIEW.w / 2, VIEW.h / 2])
+  : null;
+const geoPath = hasD3 ? d3.geoPath(projection) : null;
 
+// Returns {x, y} in canvas coords, or null if the point falls outside the US.
 function project(lat, lon) {
-  const x =
-    VIEW.pad +
-    ((lon - BOUNDS.minLon) / (BOUNDS.maxLon - BOUNDS.minLon)) *
-      (VIEW.w - 2 * VIEW.pad);
-  const y =
-    VIEW.pad +
-    (1 - (lat - BOUNDS.minLat) / (BOUNDS.maxLat - BOUNDS.minLat)) *
-      (VIEW.h - 2 * VIEW.pad);
-  return { x, y };
+  if (!projection) return null;
+  const p = projection([lon, lat]);
+  return p ? { x: p[0], y: p[1] } : null;
 }
 
-function MapView({ residents, sites, showHealthy, onHover, onLeave }) {
+function MapView({ residents, sites, showHealthy, statesGeo, onHover, onLeave }) {
   return (
     <svg viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} role="img" aria-label="Map of simulated residents and contamination sites">
-      {/* faint reference grid */}
-      {[-120,-110,-100,-90,-80,-70].map((lon) => {
-        const a = project(BOUNDS.minLat, lon), b = project(BOUNDS.maxLat, lon);
-        return <line key={"v"+lon} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#dde4ea" strokeWidth="1" />;
-      })}
-      {[30,40,50].map((lat) => {
-        const a = project(lat, BOUNDS.minLon), b = project(lat, BOUNDS.maxLon);
-        return <line key={"h"+lat} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#dde4ea" strokeWidth="1" />;
-      })}
+      {/* real US states */}
+      {statesGeo
+        ? statesGeo.map((f) => (
+            <path
+              key={f.id}
+              d={geoPath(f)}
+              fill="#e8efe6"
+              stroke="#a9bda6"
+              strokeWidth="0.7"
+              strokeLinejoin="round"
+            />
+          ))
+        : (
+          <text x={VIEW.w / 2} y={VIEW.h / 2} textAnchor="middle" fill="#94a3b8" fontSize="16">
+            Loading US map…
+          </text>
+        )}
 
       {/* residents */}
       {residents.map((r) => {
         if (!showHealthy && !r.hasCancer) return null;
-        const { x, y } = project(r.lat, r.lon);
+        const pt = project(r.lat, r.lon);
+        if (!pt) return null;
+        const { x, y } = pt;
         return (
           <circle
             key={r.id}
@@ -226,15 +275,23 @@ function MapView({ residents, sites, showHealthy, onHover, onLeave }) {
 
       {/* sites (triangles on top) */}
       {sites.map((s) => {
-        const { x, y } = project(s.lat, s.lon);
+        const pt = project(s.lat, s.lon);
+        if (!pt) return null;
+        const { x, y } = pt;
         return (
           <g key={s.id}
              onMouseMove={(e) => onHover(e, `Contamination site: ${s.name}`)}
              onMouseLeave={onLeave}>
+            {/* highlight halo around each contaminated city */}
+            <circle cx={x} cy={y} r={16} fill="#f59e0b" fillOpacity={0.18} stroke="#f59e0b" strokeOpacity={0.5} strokeWidth="1" />
             <polygon
               points={`${x},${y-9} ${x-8},${y+6} ${x+8},${y+6}`}
               fill="#111827" stroke="#fbbf24" strokeWidth="1.5"
             />
+            <text x={x + 12} y={y + 4} fontSize="11" fontWeight="600" fill="#7c2d12"
+                  stroke="#ffffff" strokeWidth="3" paintOrder="stroke">
+              {s.name.replace(/\s*\(.*\)\s*/, "")}
+            </text>
           </g>
         );
       })}
@@ -261,12 +318,208 @@ function computeStats(residents) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// REAL-DATA MODE helpers.
+// Each county's distance is the straight-line distance from its centroid to
+// the nearest contamination site (same Haversine used for the demo).
+// ---------------------------------------------------------------------------
+function countyNearestMiles(county) {
+  let nearest = Infinity, nearestSite = null;
+  for (const s of SITES) {
+    const d = distanceMiles(county.lat, county.lon, s.lat, s.lon);
+    if (d < nearest) { nearest = d; nearestSite = s; }
+  }
+  return { miles: nearest, site: nearestSite };
+}
+
+// Flexible CSV parser for convenience uploads. It looks, on each line, for a
+// known county FIPS code or county name, then grabs the first plausible
+// "rate" number (between 20 and 2000 cases per 100,000) on that line.
+function parseRatesCsv(text) {
+  const out = {};
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    for (const c of COUNTIES) {
+      const hasFips = line.includes(c.fips);
+      const hasName = line.toLowerCase().includes(c.name.split(",")[0].toLowerCase());
+      if (hasFips || hasName) {
+        const nums = (line.match(/\d{2,4}(?:\.\d+)?/g) || [])
+          .map(Number)
+          .filter((n) => n >= 20 && n <= 2000 && String(n) !== c.fips);
+        if (nums.length) out[c.fips] = nums[0];
+      }
+    }
+  }
+  return out;
+}
+
+// Real-data view: county-level aggregated rates entered/verified by the user.
+function RealCountyData() {
+  const [rates, setRates] = React.useState({}); // fips -> rate per 100,000
+  const [benchmark, setBenchmark] = React.useState(""); // US national rate, user-entered
+  const fileRef = React.useRef(null);
+
+  const rows = COUNTIES.map((c) => {
+    const near = countyNearestMiles(c);
+    return { ...c, miles: near.miles, site: near.site };
+  });
+
+  const setRate = (fips, val) =>
+    setRates((r) => ({ ...r, [fips]: val === "" ? undefined : Number(val) }));
+
+  const onUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseRatesCsv(String(reader.result));
+      setRates((prev) => ({ ...prev, ...parsed }));
+    };
+    reader.readAsText(file);
+  };
+
+  // Bin the REAL county rates by centroid distance and average them.
+  const bins = BINS.map((b) => {
+    const group = rows.filter(
+      (c) => rates[c.fips] !== undefined && b.test(c.miles)
+    );
+    const avg = group.length
+      ? group.reduce((sum, c) => sum + rates[c.fips], 0) / group.length
+      : null;
+    return { ...b, count: group.length, avg };
+  });
+  const bm = benchmark === "" ? null : Number(benchmark);
+
+  return (
+    <div className="card" style={{ borderColor: "#86efac", borderWidth: 2 }}>
+      <h2 style={{ marginTop: 0 }}>
+        5. Real Aggregated County Data{" "}
+        <span className="pill" style={{ background: "#dcfce7", color: "#166534" }}>
+          REAL counties · YOU enter verified rates
+        </span>
+      </h2>
+      <p>
+        This panel is the <strong>honest, real-world version</strong> of the demo above. Official cancer
+        registries release <strong>aggregated, age-adjusted rates per county</strong> — never individual
+        people with addresses. So here we list the <strong>real counties</strong> that contain your sites and
+        let you fill in the <strong>verified rate</strong> from the official source. <strong>Nothing is
+        pre-filled</strong>, so no number here is made up.
+      </p>
+      <p className="muted">
+        How to use: click each county's <strong>“official source ↗”</strong> link, read the age-adjusted
+        all-cancer incidence rate (cases per 100,000), and type it in. Or download the CSV from the source and
+        upload it below to auto-fill.
+      </p>
+
+      <div className="controls">
+        <label className="muted">
+          US national benchmark rate (per 100,000), from source:&nbsp;
+          <input
+            type="number" value={benchmark} placeholder="e.g. 440"
+            onChange={(e) => setBenchmark(e.target.value)}
+            style={{ width: 90, padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 6 }}
+          />
+        </label>
+        <button className="secondary" onClick={() => fileRef.current && fileRef.current.click()}>
+          ⬆ Upload rates CSV
+        </button>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onUpload} style={{ display: "none" }} />
+        <button className="secondary" onClick={() => { setRates({}); setBenchmark(""); }}>
+          Clear
+        </button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Real county</th>
+            <th>Nearest site (distance)</th>
+            <th>Verified rate / 100k</th>
+            <th>vs. benchmark</th>
+            <th>Official source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => {
+            const rate = rates[c.fips];
+            let vs = "—";
+            if (rate !== undefined && bm !== null) {
+              const diff = rate - bm;
+              vs = (diff >= 0 ? "+" : "") + diff.toFixed(1) + " (" +
+                   (diff >= 0 ? "above" : "below") + " US)";
+            }
+            return (
+              <tr key={c.fips}>
+                <td><strong>{c.name}</strong></td>
+                <td>{c.site.name} · {c.miles.toFixed(0)} mi</td>
+                <td>
+                  <input
+                    type="number" value={rate === undefined ? "" : rate}
+                    placeholder="enter"
+                    onChange={(e) => setRate(c.fips, e.target.value)}
+                    style={{ width: 80, padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 6 }}
+                  />
+                </td>
+                <td>{vs}</td>
+                <td>
+                  <a href={sourceUrlFor(c.fips)} target="_blank" rel="noopener noreferrer">
+                    official source ↗
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <h3>Real rate by distance to a site (averaged across counties)</h3>
+      <p className="muted">
+        Same idea as the demo, but using the <strong>real numbers you entered</strong>. It only fills in once
+        you've added rates. With just a few counties this is a tiny sample — read it as a starting picture, not
+        proof.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Distance group</th><th># counties with data</th><th>Average real rate / 100k</th></tr>
+        </thead>
+        <tbody>
+          {bins.map((b) => (
+            <tr key={b.key}>
+              <td><strong>{b.label}</strong></td>
+              <td>{b.count}</td>
+              <td className="stat-big">{b.avg === null ? "—" : b.avg.toFixed(1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted">
+        Reminder: even real, correctly-sourced county rates still <strong>cannot prove causation</strong> —
+        the same confounders (age, smoking, other pollutants, how long people lived there) apply. County
+        centroid distance is also a rough stand-in for true personal exposure.
+      </p>
+    </div>
+  );
+}
+
 function App() {
   const [seed, setSeed] = useState(42);
   const [showHealthy, setShowHealthy] = useState(true);
   const [siteFilter, setSiteFilter] = useState("all");
   const [tooltip, setTooltip] = useState(null);
+  const [statesGeo, setStatesGeo] = useState(null);
   const tipRef = useRef(null);
+
+  // Load real US state geometry once (static TopoJSON from a CDN; no API key).
+  React.useEffect(() => {
+    if (typeof topojson === "undefined") return;
+    fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json")
+      .then((res) => res.json())
+      .then((us) => {
+        const fc = topojson.feature(us, us.objects.states);
+        setStatesGeo(fc.features);
+      })
+      .catch(() => setStatesGeo(null));
+  }, []);
 
   const residents = useMemo(() => generateResidents(seed), [seed]);
 
@@ -285,10 +538,16 @@ function App() {
 
   return (
     <div className="wrap">
-      <h1>Cancer–Radiation Exposure Correlation Explorer</h1>
-      <p className="subtitle">
+      <div className="brandhead">
+        <img className="brandlogo" src="tinkerwhales-logo.svg"
+             alt="TinkerWhales FLL Team 63015 logo" width="84" height="84" />
+        <div>
+          <h1>Cancer–Radiation Exposure Correlation Explorer</h1>
+          <p className="subtitle">
         A FIRST LEGO League Innovation Project · Manhattan Project legacy contamination sites
       </p>
+        </div>
+      </div>
 
       <div className="banner">
         <strong>⚠️ DEMONSTRATION ONLY — SIMULATED DATA.</strong> Every "resident" dot on this map is{" "}
@@ -327,6 +586,7 @@ function App() {
           residents={filtered}
           sites={siteFilter === "all" ? SITES : SITES.filter((s) => s.id === siteFilter)}
           showHealthy={showHealthy}
+          statesGeo={statesGeo}
           onHover={onHover}
           onLeave={onLeave}
         />
@@ -402,12 +662,16 @@ function App() {
         </p>
       </div>
 
+      {/* REAL AGGREGATED COUNTY DATA (option 2) */}
+      <RealCountyData />
+
       {/* REAL WORLD IMPLEMENTATION */}
       <h2>Real-World Implementation <span className="pill">FUTURE WORK — NOT BUILT INTO THIS PROTOTYPE</span></h2>
       <div className="card future">
         <p>
-          Everything above runs on <strong>fake data</strong>. To do this for real — responsibly and
-          legally — a team would need institutional partners and would build the following.{" "}
+          The map and individual-resident demo run on <strong>fake data</strong>; the county panel above (Section 5)
+          uses <strong>real, user-verified</strong> aggregated rates. To go further — a full, responsible study —
+          a team would need institutional partners and would build the following.{" "}
           <strong>None of this is in the prototype.</strong>
         </p>
 
@@ -452,7 +716,7 @@ function App() {
       </div>
 
       <p className="muted" style={{textAlign:"center", marginTop:20}}>
-        Prototype for educational FLL Innovation Project use · Simulated data only · No real patient information.
+        Prototype for educational FLL Innovation Project use · Individual-resident map is simulated · County panel uses real user-verified aggregate rates · No real patient information.
       </p>
 
       {tooltip && (
