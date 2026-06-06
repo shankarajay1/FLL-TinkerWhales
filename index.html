@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TinkerWhales · FLL Team 63015 — Innovation Project</title>
+<style>
+  :root {
+    --ink: #14233a;
+    --muted: #4b5b71;
+    --line: #d7dde3;
+    --bg: #eef4f7;
+    --card: #ffffff;
+    --teal: #0e7490;
+    --teal2: #2dd4bf;
+    --blue: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(180deg, #dff1f4 0%, var(--bg) 240px);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 18px 64px; }
+  header { text-align: center; padding: 14px 0 8px; }
+  .logo { width: 132px; height: 132px; }
+  h1 { font-size: 30px; margin: 12px 0 2px; }
+  .team { color: var(--teal); font-weight: 700; letter-spacing: 1px; }
+  .tagline { color: var(--muted); margin-top: 4px; }
+  .intro {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 20px; margin: 18px 0 26px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  h2 { font-size: 19px; margin: 26px 0 12px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .app {
+    display: flex; flex-direction: column; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; padding: 20px;
+    text-decoration: none; color: inherit; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  }
+  .app:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(14,116,144,0.18); border-color: var(--teal2); }
+  .emoji { font-size: 34px; }
+  .app h3 { margin: 8px 0 6px; font-size: 18px; }
+  .app p { margin: 0 0 14px; color: var(--muted); font-size: 14px; flex: 1; }
+  .go { align-self: flex-start; background: var(--teal); color: #fff; font-weight: 600;
+        font-size: 14px; padding: 8px 16px; border-radius: 999px; }
+  .note {
+    background: #fff7ed; border: 1px solid #fdba74; border-radius: 12px;
+    padding: 12px 16px; margin-top: 26px; font-size: 13px; color: #7c2d12;
+  }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img class="logo" src="tinkerwhales-logo.svg" alt="TinkerWhales FLL Team 63015 logo" width="132" height="132" />
+    <h1>TinkerWhales</h1>
+    <div class="team">FIRST LEGO League · Team 63015 · St. Louis, MO</div>
+    <p class="tagline">Innovation Project — Manhattan Project legacy contamination</p>
+  </header>
+
+  <div class="intro">
+    <p style="margin:0">
+      Old Manhattan Project sites — like the <strong>St. Louis FUSRAP sites</strong> and <strong>Hanford</strong> —
+      left behind radioactive contamination. People living nearby ask: <em>could this be making us sick, and how
+      does it spread?</em> We built two interactive tools to explore those questions <strong>honestly</strong>,
+      using simulated data and clearly-labeled real-world sources.
+    </p>
+  </div>
+
+  <h2>Explore our prototypes</h2>
+  <div class="cards">
+    <a class="app" href="cancer-radiation-explorer.html">
+      <div class="emoji">🗺️</div>
+      <h3>Cancer–Radiation Exposure Correlation Explorer</h3>
+      <p>
+        A map and statistics tool that explores whether living closer to a contamination site lines up with
+        higher cancer rates — and teaches why <strong>correlation is not causation</strong>.
+      </p>
+      <span class="go">Open tool →</span>
+    </a>
+
+    <a class="app" href="groundwater-plume-simulator.html">
+      <div class="emoji">💧</div>
+      <h3>Groundwater Contamination Plume Simulator</h3>
+      <p>
+        A simplified model of how radioactive waste travels through groundwater — adjust soil, flow, depth,
+        and radioactive decay to see how far a plume could spread and which towns it reaches.
+      </p>
+      <span class="go">Open tool →</span>
+    </a>
+  </div>
+
+  <div class="note">
+    <strong>Honesty note:</strong> Both tools are educational student prototypes. They use <strong>simulated data
+    and simplified models</strong>, not real patient records or validated scientific simulations. Real studies
+    would require professional tools, expert scientists, IRB approval, and field data.
+  </div>
+
+  <footer>
+    Built by TinkerWhales (FLL Team 63015), St. Louis, MO · Educational FLL Innovation Project
+  </footer>
+</div>
+</body>
+</html>
