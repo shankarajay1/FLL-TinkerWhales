@@ -185,6 +185,51 @@ const SCENARIOS = {
     ],
     why: "St. Louis FUSRAP (USACE): contamination is shallow and tied to the Coldwater Creek floodplain, so depth-to-groundwater is only a few meters (very different from Hanford). Radium-226 and thorium-230 are the headline radionuclides.",
   },
+  paducah: {
+    label: "Paducah Gaseous Diffusion Plant (KY) — Tc-99 + TCE plume",
+    isotope: "technetium99",
+    perm: "fast",
+    flowRate: 120,          // shallow Regional Gravel Aquifer is permeable; Tc-99 plumes extend miles toward the Ohio River
+    direction: "N",
+    depth: 15,              // shallow water table in the terrace gravels (~10–18 m); not a thick vadose zone
+    source: { x: 0.42, y: 0.72 },
+    pops: [
+      { name: "Ohio River intake", x: 0.50, y: 0.18 },
+      { name: "Off-site wells (1988)", x: 0.56, y: 0.42 },
+      { name: "Grahamville",        x: 0.28, y: 0.46 },
+    ],
+    why: "Paducah Gaseous Diffusion Plant (DOE/EPA Superfund): the headline groundwater plume is trichloroethylene (TCE) plus very-mobile technetium-99. In 1988 TCE and Tc-99 turned up in off-site residential drinking-water wells; the plume moves north through shallow gravel toward the Ohio River, and DOE still supplies affected residents with city water.",
+  },
+  savannahriver: {
+    label: "Savannah River Site (SC) — tritium seepage plume",
+    isotope: "tritium",
+    perm: "medium",
+    flowRate: 60,           // sandy Coastal Plain sediments; plumes discharge to on-site streams
+    direction: "SW",
+    depth: 20,              // moderate vadose zone above the water table (~15–25 m near the basins)
+    source: { x: 0.36, y: 0.30 },
+    pops: [
+      { name: "Fourmile Branch",     x: 0.56, y: 0.58 },
+      { name: "Savannah River",      x: 0.80, y: 0.92 },
+      { name: "Downstream intake",   x: 0.66, y: 0.78 },
+    ],
+    why: "Savannah River Site (DOE/EPA Superfund, SC): seepage-basin disposal in the F/H Areas contaminated groundwater, with tritium (very mobile, 12.3-yr half-life) and iodine-129 as key markers. Plumes discharge to tributary streams such as Fourmile Branch that flow to the Savannah River — a downstream drinking-water source.",
+  },
+  idaho: {
+    label: "Idaho National Lab — Snake River Plain Aquifer",
+    isotope: "iodine129",
+    perm: "fast",
+    flowRate: 90,           // fractured basalt of the Snake River Plain Aquifer is highly transmissive
+    direction: "SW",
+    depth: 120,             // very thick vadose zone beneath INTEC (~140 m / 450 ft) — shown at the slider's 120 m max
+    source: { x: 0.30, y: 0.26 },
+    pops: [
+      { name: "Aquifer well field",  x: 0.62, y: 0.54 },
+      { name: "Atomic City",         x: 0.50, y: 0.86 },
+      { name: "Downgradient farms",  x: 0.78, y: 0.70 },
+    ],
+    why: "Idaho National Laboratory (DOE / USGS, Snake River Plain Aquifer): past disposal sent tritium, iodine-129 and strontium-90 toward one of the largest aquifers in the US. The vadose zone beneath INTEC is very thick (~140 m / 450 ft) — even deeper than this slider's 120 m maximum — so contaminants travel far down through fractured basalt before reaching groundwater.",
+  },
 };
 
 // ----------------------------------------------------------------------------
@@ -388,6 +433,27 @@ const SITE_MAPS = {
       pts: [[0.06, 0.12], [0.3, 0.32], [0.5, 0.46], [0.66, 0.64], [0.82, 0.78], [1.04, 0.9]],
       width: 14 },
   },
+  paducah: {
+    land: ["#a7be7a", "#9ab46b", "#b3c88a"], // western KY farmland green
+    veg: "rgba(80,115,55,0.30)",             // fields / tree lines
+    river: { name: "Ohio River",
+      pts: [[-0.02, 0.16], [0.25, 0.11], [0.5, 0.14], [0.75, 0.10], [1.02, 0.13]],
+      width: 30 },
+  },
+  savannahriver: {
+    land: ["#7fa05f", "#6f9252", "#8caf6c"], // SC pine-forest greens
+    veg: "rgba(45,85,40,0.38)",              // dense pine woods
+    river: { name: "Savannah River",
+      pts: [[0.30, -0.02], [0.4, 0.3], [0.55, 0.58], [0.72, 0.82], [0.9, 1.05]],
+      width: 22 },
+  },
+  idaho: {
+    land: ["#cbb487", "#c1a875", "#d6c69a"], // arid high-desert tans (sagebrush steppe)
+    veg: "rgba(115,125,75,0.26)",            // sparse sagebrush
+    river: { name: "Big Lost River (sinks)",
+      pts: [[0.12, -0.02], [0.2, 0.2], [0.26, 0.42], [0.2, 0.62], [0.13, 0.8]],
+      width: 12 },
+  },
   _default: {
     land: ["#a9b88c", "#9fb081", "#b3c098"], // generic terrain
     veg: "rgba(90,120,70,0.25)",
@@ -399,7 +465,7 @@ const SITE_MAPS = {
 
 function drawSiteMap(ctx, W, H, scenarioKey) {
   const theme = SITE_MAPS[scenarioKey] || SITE_MAPS._default;
-  const rnd = seeded(scenarioKey === "hanford" ? 11 : scenarioKey === "stlouis" ? 23 : 7);
+  const rnd = seeded(scenarioKey === "hanford" ? 11 : scenarioKey === "stlouis" ? 23 : scenarioKey === "paducah" ? 31 : scenarioKey === "savannahriver" ? 37 : scenarioKey === "idaho" ? 41 : 7);
 
   // base land gradient
   const g = ctx.createLinearGradient(0, 0, W, H);
@@ -711,6 +777,9 @@ function App() {
           <div className="btn-row">
             <button onClick={() => loadScenario("hanford")} className={scenarioKey==="hanford"?"":""}>Hanford, WA</button>
             <button onClick={() => loadScenario("stlouis")}>St. Louis FUSRAP</button>
+            <button onClick={() => loadScenario("paducah")}>Paducah, KY</button>
+            <button onClick={() => loadScenario("savannahriver")}>Savannah River, SC</button>
+            <button onClick={() => loadScenario("idaho")}>Idaho National Lab</button>
           </div>
           <p className="hint">{scenarioKey ? SCENARIOS[scenarioKey].label : "Pick a real legacy site, or build your own below."}</p>
           {scenarioKey && (
@@ -869,7 +938,7 @@ function App() {
       {/* ---------------- DATA SOURCES ---------------- */}
       <h2>📑 Where the numbers come from (public data)</h2>
       <div className="panel">
-        <p>The slider defaults in the Hanford and St. Louis scenarios are realistic <b>ballpark figures from public summaries</b> — good enough to set the model, but for your project board you should open the actual report PDF and quote its exact number. All of these sources are free to the public.</p>
+        <p>The slider defaults in every scenario (Hanford, St. Louis, Paducah, Savannah River, Idaho National Lab) are realistic <b>ballpark figures from public summaries</b> — good enough to set the model, but for your project board you should open the actual report PDF and quote its exact number. All of these sources are free to the public.</p>
         <table>
           <thead>
             <tr><th>Source</th><th>What you get</th><th>How to access</th></tr>
@@ -896,6 +965,21 @@ function App() {
               <td>USACE St. Louis District FUSRAP project pages + their RI reports</td>
             </tr>
             <tr>
+              <td><b>Paducah (PGDP)</b><br/>DOE PPPO + EPA Superfund</td>
+              <td>TCE + technetium-99 plume maps, off-site well history, flow toward the Ohio River</td>
+              <td><a href="https://www.energy.gov/pppo/paducah-site" target="_blank" rel="noopener noreferrer">energy.gov/pppo/paducah-site</a> + EPA SEMS</td>
+            </tr>
+            <tr>
+              <td><b>Savannah River Site</b><br/>DOE-SR + EPA Superfund</td>
+              <td>F/H-Area seepage-basin tritium &amp; iodine-129 plumes, discharge to Savannah River</td>
+              <td><a href="https://www.srs.gov" target="_blank" rel="noopener noreferrer">srs.gov</a> environmental reports + EPA SEMS</td>
+            </tr>
+            <tr>
+              <td><b>Idaho National Lab</b><br/>USGS INL Project Office + DOE</td>
+              <td>Snake River Plain Aquifer tritium / I-129 / Sr-90 data, thick vadose-zone depths</td>
+              <td><a href="https://www.usgs.gov/centers/idaho-water-science-center" target="_blank" rel="noopener noreferrer">USGS Idaho Water Science Center</a></td>
+            </tr>
+            <tr>
               <td><b>U.S. Census</b><br/>block-group population</td>
               <td>Population counts to layer on the map (how many people inside a plume)</td>
               <td><a href="https://data.census.gov" target="_blank" rel="noopener noreferrer">data.census.gov</a></td>
@@ -917,6 +1001,28 @@ function App() {
             <ul>
               <li>Contamination is <b>shallow</b> and tied to the Coldwater Creek floodplain — depth-to-groundwater is only <b>a few meters</b> (very different from Hanford).</li>
               <li>Headline radionuclides: <b>radium-226</b> and <b>thorium-230</b>.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Paducah (PGDP) — published ballparks</h3>
+            <ul>
+              <li>Headline plume: <b>trichloroethylene (TCE)</b> plus very-mobile <b>technetium-99</b>.</li>
+              <li>In <b>1988</b>, TCE and Tc-99 were found in <b>off-site drinking-water wells</b>; DOE supplies affected homes with city water.</li>
+              <li>Shallow, permeable gravel aquifer; plume migrates <b>north toward the Ohio River</b>.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Savannah River Site — published ballparks</h3>
+            <ul>
+              <li><b>F/H-Area seepage basins</b> contaminated groundwater; key markers are <b>tritium</b> (12.3-yr half-life) and <b>iodine-129</b>.</li>
+              <li>Plumes discharge to tributaries like <b>Fourmile Branch</b> that flow to the <b>Savannah River</b>, a downstream drinking-water source. (Superfund since 1989.)</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Idaho National Lab — published ballparks</h3>
+            <ul>
+              <li>Sits on the <b>Snake River Plain Aquifer</b>, one of the largest in the US; concern isotopes include <b>tritium, iodine-129, strontium-90</b>.</li>
+              <li>The vadose zone beneath INTEC is very thick (<b>~140 m / 450 ft</b>) — contaminants travel far down through <b>fractured basalt</b> before reaching groundwater.</li>
             </ul>
           </div>
         </div>
